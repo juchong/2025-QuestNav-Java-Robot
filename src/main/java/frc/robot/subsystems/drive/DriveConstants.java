@@ -41,11 +41,21 @@ public class DriveConstants {
   public static final Rotation2d backRightZeroRotation = new Rotation2d(-1.569);
 
   // Device CAN IDs
+<<<<<<< HEAD
   public static final int frontLeftDriveCanId = 41;
   public static final int backLeftDriveCanId = 31;
   public static final int frontRightDriveCanId = 11;
   public static final int backRightDriveCanId = 21;
 
+=======
+  public static final int pigeonCanId = 99;
+
+  public static final int frontLeftDriveCanId = 41;
+  public static final int backLeftDriveCanId = 31;
+  public static final int frontRightDriveCanId = 11;
+  public static final int backRightDriveCanId = 21;
+
+>>>>>>> 7244c1b12b9cc379aa9ec830983dcd1bda6db247
   public static final int frontLeftTurnCanId = 42;
   public static final int backLeftTurnCanId = 32;
   public static final int frontRightTurnCanId = 12;
