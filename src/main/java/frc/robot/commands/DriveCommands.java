@@ -14,6 +14,7 @@
 package frc.robot.commands;
 
 import edu.wpi.first.math.MathUtil;
+import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.controller.ProfiledPIDController;
 import edu.wpi.first.math.filter.SlewRateLimiter;
 import edu.wpi.first.math.geometry.Pose2d;
@@ -30,6 +31,7 @@ import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
 import frc.robot.subsystems.drive.Drive;
 import frc.robot.subsystems.drive.DriveConstants;
+import frc.robot.subsystems.questnav.QuestNavSubsystem;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.LinkedList;
@@ -288,6 +290,255 @@ public class DriveCommands {
                               + formatter.format(Units.metersToInches(wheelRadius))
                               + " inches");
                     })));
+  }
+
+  // ==================== QuestNav Closed-Loop Drive Commands ====================
+
+  /**
+   * Enhanced joystick drive with QuestNav closed-loop heading control. Automatically corrects for
+   * heading drift while allowing manual rotation input.
+   */
+  public static Command questNavJoystickDrive(
+      Drive drive,
+      QuestNavSubsystem questNav,
+      DoubleSupplier xSupplier,
+      DoubleSupplier ySupplier,
+      DoubleSupplier omegaSupplier) {
+
+    PIDController headingController = new PIDController(1.5, 0.0, 0.1);
+    headingController.enableContinuousInput(-Math.PI, Math.PI);
+    headingController.setTolerance(0.05); // 3 degree tolerance
+
+    SlewRateLimiter linearRateLimiter = new SlewRateLimiter(2.0);
+    SlewRateLimiter angularRateLimiter = new SlewRateLimiter(3.0);
+
+    return Commands.run(
+        () -> {
+          // Get linear velocity
+          Translation2d linearVelocity =
+              getLinearVelocityFromJoysticks(xSupplier.getAsDouble(), ySupplier.getAsDouble());
+
+          // Apply rotation deadband
+          double omega = MathUtil.applyDeadband(omegaSupplier.getAsDouble(), DEADBAND);
+
+          // If manual rotation input is provided, use it directly
+          if (Math.abs(omega) > 0.1) {
+            // Manual rotation - square for better control
+            omega = Math.copySign(omega * omega, omega);
+            omega = angularRateLimiter.calculate(omega);
+          } else {
+            // No manual rotation - use QuestNav for heading hold (if available and valid)
+            if (questNav.isActive() && questNav.isTracking()) {
+              try {
+                double currentHeading = questNav.getCurrentYawRadians();
+                // Debug: Print heading values occasionally
+                if (System.currentTimeMillis() % 1000 < 50) { // Print every ~1 second
+                  System.out.println(
+                      "QuestNav Heading: "
+                          + currentHeading
+                          + " rad ("
+                          + Math.toDegrees(currentHeading)
+                          + "°)");
+                }
+                // Only apply correction if we have valid data (not exactly 0.0)
+                if (Math.abs(currentHeading) > 0.001
+                    || questNav.getRobotPose().getTranslation().getNorm() > 0.001) {
+                  double headingCorrection = headingController.calculate(currentHeading, 0.0);
+                  // Debug: Print correction values occasionally
+                  if (System.currentTimeMillis() % 1000 < 50) {
+                    System.out.println(
+                        "Heading Correction: "
+                            + headingCorrection
+                            + " (At Setpoint: "
+                            + headingController.atSetpoint()
+                            + ")");
+                  }
+                  // Only apply correction if not at setpoint
+                  if (!headingController.atSetpoint()) {
+                    // Limit correction to prevent excessive spinning
+                    headingCorrection = MathUtil.clamp(headingCorrection, -0.5, 0.5);
+                    omega = angularRateLimiter.calculate(headingCorrection);
+                  } else {
+                    omega = 0.0;
+                  }
+                } else {
+                  // QuestNav data appears invalid, don't apply correction
+                  omega = 0.0;
+                }
+              } catch (Exception e) {
+                // QuestNav not available, use manual control
+                omega = 0.0;
+              }
+            } else {
+              // QuestNav not active or not tracking, no automatic correction
+              omega = 0.0;
+            }
+          }
+
+          // Apply rate limiting to linear movement
+          double xSpeed = linearRateLimiter.calculate(linearVelocity.getX());
+          double ySpeed = linearRateLimiter.calculate(linearVelocity.getY());
+
+          // Convert to field relative speeds & send command
+          ChassisSpeeds speeds =
+              new ChassisSpeeds(
+                  xSpeed * drive.getMaxLinearSpeedMetersPerSec(),
+                  ySpeed * drive.getMaxLinearSpeedMetersPerSec(),
+                  omega * drive.getMaxAngularSpeedRadPerSec());
+          boolean isFlipped =
+              DriverStation.getAlliance().isPresent()
+                  && DriverStation.getAlliance().get() == Alliance.Red;
+          drive.runVelocity(
+              ChassisSpeeds.fromFieldRelativeSpeeds(
+                  speeds,
+                  isFlipped
+                      ? drive.getRotation().plus(new Rotation2d(Math.PI))
+                      : drive.getRotation()));
+        },
+        drive,
+        questNav);
+  }
+
+  /**
+   * QuestNav-enhanced drive with automatic heading correction. Maintains straight-line movement
+   * when no rotation input is provided.
+   */
+  public static Command questNavStraightDrive(
+      Drive drive,
+      QuestNavSubsystem questNav,
+      DoubleSupplier xSupplier,
+      DoubleSupplier ySupplier,
+      DoubleSupplier omegaSupplier) {
+
+    PIDController headingController = new PIDController(2.0, 0.0, 0.15);
+    headingController.enableContinuousInput(-Math.PI, Math.PI);
+
+    SlewRateLimiter linearRateLimiter = new SlewRateLimiter(2.0);
+    SlewRateLimiter angularRateLimiter = new SlewRateLimiter(2.5);
+
+    return Commands.run(
+        () -> {
+          // Get linear velocity
+          Translation2d linearVelocity =
+              getLinearVelocityFromJoysticks(xSupplier.getAsDouble(), ySupplier.getAsDouble());
+
+          // Apply rotation deadband
+          double omega = MathUtil.applyDeadband(omegaSupplier.getAsDouble(), DEADBAND);
+
+          // Always apply QuestNav heading correction, but allow manual override
+          if (questNav.isActive()) {
+            try {
+              double currentHeading = questNav.getCurrentYawRadians();
+              double headingCorrection = headingController.calculate(currentHeading, 0.0);
+
+              // Combine manual rotation with heading correction
+              omega = omega + (headingCorrection * 0.3); // Scale down auto-correction
+            } catch (Exception e) {
+              // QuestNav not available, use manual control only
+            }
+          }
+          omega = MathUtil.clamp(omega, -1.0, 1.0); // Clamp to prevent saturation
+          omega = angularRateLimiter.calculate(omega);
+
+          // Apply rate limiting to linear movement
+          double xSpeed = linearRateLimiter.calculate(linearVelocity.getX());
+          double ySpeed = linearRateLimiter.calculate(linearVelocity.getY());
+
+          // Convert to field relative speeds & send command
+          ChassisSpeeds speeds =
+              new ChassisSpeeds(
+                  xSpeed * drive.getMaxLinearSpeedMetersPerSec(),
+                  ySpeed * drive.getMaxLinearSpeedMetersPerSec(),
+                  omega * drive.getMaxAngularSpeedRadPerSec());
+          boolean isFlipped =
+              DriverStation.getAlliance().isPresent()
+                  && DriverStation.getAlliance().get() == Alliance.Red;
+          drive.runVelocity(
+              ChassisSpeeds.fromFieldRelativeSpeeds(
+                  speeds,
+                  isFlipped
+                      ? drive.getRotation().plus(new Rotation2d(Math.PI))
+                      : drive.getRotation()));
+        },
+        drive,
+        questNav);
+  }
+
+  /**
+   * QuestNav-enhanced drive with smooth rotation control. Uses profiled PID for smooth heading
+   * changes when rotation input is provided.
+   */
+  public static Command questNavSmoothDrive(
+      Drive drive,
+      QuestNavSubsystem questNav,
+      DoubleSupplier xSupplier,
+      DoubleSupplier ySupplier,
+      DoubleSupplier omegaSupplier) {
+
+    ProfiledPIDController headingController =
+        new ProfiledPIDController(3.0, 0.0, 0.2, new TrapezoidProfile.Constraints(4.0, 8.0));
+    headingController.enableContinuousInput(-Math.PI, Math.PI);
+
+    SlewRateLimiter linearRateLimiter = new SlewRateLimiter(2.0);
+    SlewRateLimiter angularRateLimiter = new SlewRateLimiter(3.0);
+
+    return Commands.run(
+        () -> {
+          // Get linear velocity
+          Translation2d linearVelocity =
+              getLinearVelocityFromJoysticks(xSupplier.getAsDouble(), ySupplier.getAsDouble());
+
+          // Apply rotation deadband
+          double omega = MathUtil.applyDeadband(omegaSupplier.getAsDouble(), DEADBAND);
+
+          // If manual rotation input is provided, use profiled PID for smooth control
+          if (questNav.isActive()) {
+            try {
+              if (Math.abs(omega) > 0.1) {
+                // Calculate target heading based on current heading + rotation input
+                double currentHeading = questNav.getCurrentYawRadians();
+                double targetHeading = currentHeading + (omega * 0.5); // Scale rotation input
+                omega = headingController.calculate(currentHeading, targetHeading);
+                omega = angularRateLimiter.calculate(omega);
+              } else {
+                // No manual rotation - hold current heading
+                double currentHeading = questNav.getCurrentYawRadians();
+                omega = headingController.calculate(currentHeading, currentHeading);
+                omega = angularRateLimiter.calculate(omega);
+              }
+            } catch (Exception e) {
+              // QuestNav not available, use manual control
+              omega = Math.copySign(omega * omega, omega);
+              omega = angularRateLimiter.calculate(omega);
+            }
+          } else {
+            // QuestNav not active, use manual control
+            omega = Math.copySign(omega * omega, omega);
+            omega = angularRateLimiter.calculate(omega);
+          }
+
+          // Apply rate limiting to linear movement
+          double xSpeed = linearRateLimiter.calculate(linearVelocity.getX());
+          double ySpeed = linearRateLimiter.calculate(linearVelocity.getY());
+
+          // Convert to field relative speeds & send command
+          ChassisSpeeds speeds =
+              new ChassisSpeeds(
+                  xSpeed * drive.getMaxLinearSpeedMetersPerSec(),
+                  ySpeed * drive.getMaxLinearSpeedMetersPerSec(),
+                  omega * drive.getMaxAngularSpeedRadPerSec());
+          boolean isFlipped =
+              DriverStation.getAlliance().isPresent()
+                  && DriverStation.getAlliance().get() == Alliance.Red;
+          drive.runVelocity(
+              ChassisSpeeds.fromFieldRelativeSpeeds(
+                  speeds,
+                  isFlipped
+                      ? drive.getRotation().plus(new Rotation2d(Math.PI))
+                      : drive.getRotation()));
+        },
+        drive,
+        questNav);
   }
 
   private static class WheelRadiusCharacterizationState {

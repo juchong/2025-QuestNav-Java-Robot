@@ -23,12 +23,15 @@ import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
 import frc.robot.commands.DriveCommands;
+import frc.robot.commands.QuestNavClosedLoopControl;
+import frc.robot.commands.QuestNavDiagnostics;
 import frc.robot.subsystems.drive.Drive;
 import frc.robot.subsystems.drive.GyroIO;
 import frc.robot.subsystems.drive.GyroIOQuestNav;
 import frc.robot.subsystems.drive.ModuleIO;
 import frc.robot.subsystems.drive.ModuleIOSim;
 import frc.robot.subsystems.drive.ModuleIOSpark;
+import frc.robot.subsystems.questnav.QuestNavSubsystem;
 import org.littletonrobotics.junction.networktables.LoggedDashboardChooser;
 
 /**
@@ -40,6 +43,7 @@ import org.littletonrobotics.junction.networktables.LoggedDashboardChooser;
 public class RobotContainer {
   // Subsystems
   private final Drive drive;
+  private final QuestNavSubsystem questNav;
 
   // Controller
   private final CommandXboxController controller = new CommandXboxController(0);
@@ -49,6 +53,9 @@ public class RobotContainer {
 
   /** The container for the robot. Contains subsystems, OI devices, and commands. */
   public RobotContainer() {
+    // Initialize QuestNav subsystem
+    questNav = new QuestNavSubsystem();
+
     switch (Constants.currentMode) {
       case REAL:
         // Real robot, instantiate hardware IO implementations
@@ -114,7 +121,7 @@ public class RobotContainer {
    * edu.wpi.first.wpilibj2.command.button.JoystickButton}.
    */
   private void configureButtonBindings() {
-    // Default command, normal field-relative drive
+    // Default command, normal field-relative drive (fallback mode)
     drive.setDefaultCommand(
         DriveCommands.joystickDrive(
             drive,
@@ -122,20 +129,49 @@ public class RobotContainer {
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
 
-    // Lock to 0° when A button is held
+    // Switch to QuestNav-enhanced drive when A button is held
     controller
         .a()
         .whileTrue(
-            DriveCommands.joystickDriveAtAngle(
+            DriveCommands.questNavJoystickDrive(
                 drive,
+                questNav,
                 () -> -controller.getLeftY(),
                 () -> -controller.getLeftX(),
-                () -> new Rotation2d()));
+                () -> -controller.getRightX()));
 
-    // Switch to X pattern when X button is pressed
-    controller.x().onTrue(Commands.runOnce(drive::stopWithX, drive));
+    // Switch to smooth drive mode when Y button is held
+    controller
+        .y()
+        .whileTrue(
+            DriveCommands.questNavSmoothDrive(
+                drive,
+                questNav,
+                () -> -controller.getLeftY(),
+                () -> -controller.getLeftX(),
+                () -> -controller.getRightX()));
 
-    // Reset gyro to 0° when B button is pressed
+    // Turn to 90° when right bumper is pressed (using QuestNav closed-loop control)
+    controller
+        .rightBumper()
+        .onTrue(
+            QuestNavClosedLoopControl.turnToHeading(
+                drive, questNav, () -> new Rotation2d(Math.PI / 2)));
+
+    // Turn to 180° when left bumper is pressed
+    controller
+        .leftBumper()
+        .onTrue(
+            QuestNavClosedLoopControl.turnToHeading(
+                drive, questNav, () -> new Rotation2d(Math.PI)));
+
+    // Print QuestNav diagnostics when X button is pressed
+    controller.x().onTrue(QuestNavDiagnostics.printDiagnostics(questNav));
+
+    // Switch to X pattern when start button is pressed
+    controller.start().onTrue(Commands.runOnce(drive::stopWithX, drive));
+
+    // Reset gyro to 0° when B button is pressed
     controller
         .b()
         .onTrue(

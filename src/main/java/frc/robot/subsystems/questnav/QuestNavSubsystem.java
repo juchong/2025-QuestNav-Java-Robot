@@ -15,7 +15,9 @@
 package frc.robot.subsystems.questnav;
 
 import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Transform2d;
+import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import gg.questnav.questnav.PoseFrame;
 import gg.questnav.questnav.QuestNav;
@@ -32,7 +34,7 @@ public class QuestNavSubsystem extends SubsystemBase {
 
   // Transform from robot center to QuestNav camera position
   // TODO: Measure and set the actual transform values
-  private static final Transform2d ROBOT_TO_QUEST = new Transform2d(0.0, 0.0, null);
+  private static final Transform2d ROBOT_TO_QUEST = new Transform2d(0.0, 0.0, new Rotation2d());
 
   public QuestNavSubsystem() {
     questNav = new QuestNav();
@@ -46,6 +48,16 @@ public class QuestNavSubsystem extends SubsystemBase {
     Logger.recordOutput("QuestNav/Connected", questNav.isConnected());
     Logger.recordOutput("QuestNav/Tracking", questNav.isTracking());
     Logger.recordOutput("QuestNav/Latency", questNav.getLatency());
+
+    // Log current pose data for debugging
+    try {
+      Pose2d currentPose = getRobotPose();
+      Logger.recordOutput("QuestNav/CurrentYawDegrees", currentPose.getRotation().getDegrees());
+      Logger.recordOutput("QuestNav/CurrentX", currentPose.getX());
+      Logger.recordOutput("QuestNav/CurrentY", currentPose.getY());
+    } catch (Exception e) {
+      Logger.recordOutput("QuestNav/Error", e.getMessage());
+    }
 
     // Log battery percentage if available
     questNav
@@ -64,10 +76,17 @@ public class QuestNavSubsystem extends SubsystemBase {
    * @return The robot's current pose, or a default pose if no data is available
    */
   public Pose2d getRobotPose() {
-    PoseFrame[] poseFrames = questNav.getAllUnreadPoseFrames();
-    if (poseFrames.length > 0) {
-      Pose2d questPose = poseFrames[poseFrames.length - 1].questPose();
-      return questPose.transformBy(ROBOT_TO_QUEST.inverse());
+    try {
+      PoseFrame[] poseFrames = questNav.getAllUnreadPoseFrames();
+      if (poseFrames.length > 0) {
+        Pose2d questPose = poseFrames[poseFrames.length - 1].questPose();
+        if (questPose != null) {
+          return questPose.transformBy(ROBOT_TO_QUEST.inverse());
+        }
+      }
+    } catch (Exception e) {
+      // Log error and return default pose
+      System.err.println("Error getting QuestNav pose: " + e.getMessage());
     }
     return new Pose2d(); // Return default pose if no data is available
   }
@@ -152,5 +171,65 @@ public class QuestNavSubsystem extends SubsystemBase {
    */
   public java.util.OptionalDouble getAppTimestamp() {
     return questNav.getAppTimestamp();
+  }
+
+  /**
+   * Gets the current yaw (heading) from QuestNav in degrees.
+   *
+   * @return Current yaw in degrees, or 0.0 if no data available
+   */
+  public double getCurrentYawDegrees() {
+    try {
+      Pose2d currentPose = getRobotPose();
+      return currentPose.getRotation().getDegrees();
+    } catch (Exception e) {
+      System.err.println("Error getting QuestNav yaw degrees: " + e.getMessage());
+      return 0.0;
+    }
+  }
+
+  /**
+   * Gets the current yaw (heading) from QuestNav in radians.
+   *
+   * @return Current yaw in radians, or 0.0 if no data available
+   */
+  public double getCurrentYawRadians() {
+    try {
+      Pose2d currentPose = getRobotPose();
+      return currentPose.getRotation().getRadians();
+    } catch (Exception e) {
+      System.err.println("Error getting QuestNav yaw radians: " + e.getMessage());
+      return 0.0;
+    }
+  }
+
+  /**
+   * Gets the current rotation from QuestNav.
+   *
+   * @return Current rotation, or zero rotation if no data available
+   */
+  public Rotation2d getCurrentRotation() {
+    try {
+      Pose2d currentPose = getRobotPose();
+      return currentPose.getRotation();
+    } catch (Exception e) {
+      System.err.println("Error getting QuestNav rotation: " + e.getMessage());
+      return new Rotation2d();
+    }
+  }
+
+  /**
+   * Gets the current position from QuestNav.
+   *
+   * @return Current position, or zero position if no data available
+   */
+  public Translation2d getCurrentPosition() {
+    try {
+      Pose2d currentPose = getRobotPose();
+      return currentPose.getTranslation();
+    } catch (Exception e) {
+      System.err.println("Error getting QuestNav position: " + e.getMessage());
+      return new Translation2d();
+    }
   }
 }
