@@ -31,6 +31,9 @@ public class GyroIOQuestNav implements GyroIO {
   private double previousTimestamp = 0.0;
   private double yawVelocityRadPerSec = 0.0;
 
+  // Last known yaw to prevent flipping to zero
+  private double lastKnownYawDegrees = 0.0;
+
   public GyroIOQuestNav() {
     yawTimestampQueue = SparkOdometryThread.getInstance().makeTimestampQueue();
     yawPositionQueue = SparkOdometryThread.getInstance().registerSignal(this::getCurrentYawDegrees);
@@ -71,7 +74,7 @@ public class GyroIOQuestNav implements GyroIO {
     inputs.yawPosition = Rotation2d.fromDegrees(currentYawDegrees);
     inputs.yawVelocityRadPerSec = yawVelocityRadPerSec;
 
-    // Update odometry data
+    // Update odometry data from queues
     inputs.odometryYawTimestamps =
         yawTimestampQueue.stream().mapToDouble((Double value) -> value).toArray();
     inputs.odometryYawPositions =
@@ -91,8 +94,8 @@ public class GyroIOQuestNav implements GyroIO {
     PoseFrame[] poseFrames = questNav.getAllUnreadPoseFrames();
     if (poseFrames.length > 0) {
       Pose2d questPose = poseFrames[poseFrames.length - 1].questPose();
-      return questPose.getRotation().getDegrees();
+      lastKnownYawDegrees = questPose.getRotation().getDegrees();
     }
-    return 0.0; // Return 0 if no data available
+    return lastKnownYawDegrees; // Return last known value if no new data available
   }
 }

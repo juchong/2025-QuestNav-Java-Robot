@@ -51,6 +51,9 @@ public class DriveConstants {
   public static final int frontRightTurnCanId = 12;
   public static final int backRightTurnCanId = 22;
 
+  // Not needed for this example, but exists to make it happy
+  public static final int pigeonCanId = 99;
+
   // Drive motor configuration
   public static final int driveMotorCurrentLimit = 20;
   public static final double driveMotorPinionTeeth = 12.0;
