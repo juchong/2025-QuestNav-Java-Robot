@@ -15,7 +15,6 @@ package frc.robot;
 
 import com.pathplanner.lib.auto.AutoBuilder;
 import edu.wpi.first.math.geometry.Pose2d;
-import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.wpilibj.GenericHID;
 import edu.wpi.first.wpilibj.XboxController;
 import edu.wpi.first.wpilibj2.command.Command;
@@ -23,7 +22,6 @@ import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
 import frc.robot.commands.DriveCommands;
-import frc.robot.commands.QuestNavClosedLoopControl;
 import frc.robot.commands.QuestNavDiagnostics;
 import frc.robot.subsystems.drive.Drive;
 import frc.robot.subsystems.drive.GyroIO;
@@ -54,6 +52,7 @@ public class RobotContainer {
 
   // Drive mode state
   private boolean questNavMode = true;
+  private boolean smoothDriveActive = false;
 
   /** The container for the robot. Contains subsystems, OI devices, and commands. */
   public RobotContainer() {
@@ -135,23 +134,11 @@ public class RobotContainer {
               questNavMode = !questNavMode;
               Logger.recordOutput("RobotContainer/QuestNavMode", questNavMode);
               if (questNavMode) {
-                drive.setDefaultCommand(
-                    DriveCommands.questNavJoystickDrive(
-                        drive,
-                        questNav,
-                        () -> -controller.getLeftY(),
-                        () -> -controller.getLeftX(),
-                        () -> -controller.getRightX()));
-                System.out.println("Switched to QuestNav-enhanced drive mode");
+                System.out.println("QuestNav-enhanced drive mode enabled");
               } else {
-                drive.setDefaultCommand(
-                    DriveCommands.joystickDrive(
-                        drive,
-                        () -> -controller.getLeftY(),
-                        () -> -controller.getLeftX(),
-                        () -> -controller.getRightX()));
-                System.out.println("Switched to open-loop drive mode");
+                System.out.println("Open-loop drive mode enabled");
               }
+              updateDriveCommand();
             });
 
     // Default command, QuestNav-enhanced drive mode
@@ -166,47 +153,73 @@ public class RobotContainer {
     // Toggle between QuestNav-enhanced and open-loop drive when start button (button 9) is pressed
     controller.start().onTrue(toggleDriveMode);
 
-    // Switch to smooth drive mode when Y button is held
+    // Switch to smooth drive mode when X button is pressed (single press toggle)
+    // Note: X and Y are swapped on this controller
+    controller
+        .x()
+        .onTrue(
+            Commands.runOnce(
+                () -> {
+                  System.out.println("X button pressed - toggling smooth drive mode");
+                  smoothDriveActive = !smoothDriveActive;
+                  if (smoothDriveActive) {
+                    System.out.println("Smooth drive mode activated");
+                  } else {
+                    System.out.println("Smooth drive mode deactivated");
+                  }
+                  updateDriveCommand();
+                }));
+
+    // Print QuestNav diagnostics when Y button is pressed
+    // Note: Y and X are swapped on this controller
     controller
         .y()
-        .whileTrue(
-            DriveCommands.questNavSmoothDrive(
-                drive,
-                questNav,
-                () -> -controller.getLeftY(),
-                () -> -controller.getLeftX(),
-                () -> -controller.getRightX()));
-
-    // Turn to 90° when right bumper is pressed (using QuestNav closed-loop control)
-    controller
-        .rightBumper()
         .onTrue(
-            QuestNavClosedLoopControl.turnToHeading(
-                drive, questNav, () -> new Rotation2d(Math.PI / 2)));
+            Commands.runOnce(
+                    () -> {
+                      System.out.println("Y button pressed - printing diagnostics");
+                    })
+                .andThen(QuestNavDiagnostics.printDiagnostics(questNav, drive)));
 
-    // Turn to 180° when left bumper is pressed
-    controller
-        .leftBumper()
-        .onTrue(
-            QuestNavClosedLoopControl.turnToHeading(
-                drive, questNav, () -> new Rotation2d(Math.PI)));
-
-    // Print QuestNav diagnostics when X button is pressed
-    controller.x().onTrue(QuestNavDiagnostics.printDiagnostics(questNav, drive));
-
-    // Switch to X pattern when A button is pressed
-    controller.a().onTrue(Commands.runOnce(drive::stopWithX, drive));
-
-    // Reset gyro to 0° when B button is pressed
+    // Reset QuestNav heading when B button is pressed
+    // Note: B and A are swapped on this controller
     controller
         .b()
         .onTrue(
             Commands.runOnce(
-                    () ->
-                        drive.setPose(
-                            new Pose2d(drive.getPose().getTranslation(), new Rotation2d())),
+                () -> {
+                  if (questNav.isActive()) {
+                    // Reset QuestNav heading to current robot heading
+                    Pose2d currentRobotPose = drive.getPose();
+                    questNav.setRobotPose(currentRobotPose);
+                    System.out.println(
+                        "QuestNav heading reset to robot pose: X="
+                            + String.format("%.1f", currentRobotPose.getX())
+                            + ", Y="
+                            + String.format("%.1f", currentRobotPose.getY())
+                            + ", Rotation="
+                            + String.format("%.1f", currentRobotPose.getRotation().getDegrees())
+                            + "°");
+                  } else {
+                    System.out.println("QuestNav not active - cannot reset heading");
+                  }
+                }));
+
+    // Reset gyro to 0° when A button is pressed (short press)
+    // Note: A and B are swapped on this controller
+    controller
+        .a()
+        .onTrue(
+            Commands.runOnce(
+                    () -> {
+                      drive.setGyroOffset();
+                      System.out.println("Gyro zeroed at current heading");
+                    },
                     drive)
                 .ignoringDisable(true));
+
+    // Note: Long press functionality temporarily disabled due to button mapping conflicts
+    // TODO: Re-implement long press with proper button mapping
   }
 
   /**
@@ -225,5 +238,39 @@ public class RobotContainer {
    */
   public boolean isQuestNavMode() {
     return questNavMode;
+  }
+
+  /** Updates the drive command based on current mode settings. */
+  private void updateDriveCommand() {
+    if (smoothDriveActive) {
+      // Use smooth drive mode
+      System.out.println("Setting drive command: QuestNav Smooth Drive");
+      drive.setDefaultCommand(
+          DriveCommands.questNavSmoothDrive(
+              drive,
+              questNav,
+              () -> -controller.getLeftY(),
+              () -> -controller.getLeftX(),
+              () -> -controller.getRightX()));
+    } else if (questNavMode) {
+      // Use QuestNav-enhanced drive mode
+      System.out.println("Setting drive command: QuestNav-enhanced Drive");
+      drive.setDefaultCommand(
+          DriveCommands.questNavJoystickDrive(
+              drive,
+              questNav,
+              () -> -controller.getLeftY(),
+              () -> -controller.getLeftX(),
+              () -> -controller.getRightX()));
+    } else {
+      // Use open-loop drive mode
+      System.out.println("Setting drive command: Open-loop Drive");
+      drive.setDefaultCommand(
+          DriveCommands.joystickDrive(
+              drive,
+              () -> -controller.getLeftY(),
+              () -> -controller.getLeftX(),
+              () -> -controller.getRightX()));
+    }
   }
 }

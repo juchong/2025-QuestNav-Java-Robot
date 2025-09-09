@@ -34,6 +34,9 @@ public class GyroIOQuestNav implements GyroIO {
   // Last known yaw to prevent flipping to zero
   private double lastKnownYawDegrees = 0.0;
 
+  // Yaw offset to zero the gyro
+  private double yawOffsetDegrees = 0.0;
+
   public GyroIOQuestNav() {
     yawTimestampQueue = SparkOdometryThread.getInstance().makeTimestampQueue();
     yawPositionQueue = SparkOdometryThread.getInstance().registerSignal(this::getCurrentYawDegrees);
@@ -86,9 +89,9 @@ public class GyroIOQuestNav implements GyroIO {
   }
 
   /**
-   * Gets the current yaw angle in degrees from QuestNav.
+   * Gets the current yaw angle in degrees from QuestNav with offset applied.
    *
-   * @return Current yaw angle in degrees
+   * @return Current yaw angle in degrees with offset applied
    */
   private double getCurrentYawDegrees() {
     PoseFrame[] poseFrames = questNav.getAllUnreadPoseFrames();
@@ -96,6 +99,22 @@ public class GyroIOQuestNav implements GyroIO {
       Pose2d questPose = poseFrames[poseFrames.length - 1].questPose();
       lastKnownYawDegrees = questPose.getRotation().getDegrees();
     }
-    return lastKnownYawDegrees; // Return last known value if no new data available
+
+    // Apply offset and normalize to [-180, 180] range
+    double offsetYaw = lastKnownYawDegrees - yawOffsetDegrees;
+    while (offsetYaw > 180.0) offsetYaw -= 360.0;
+    while (offsetYaw < -180.0) offsetYaw += 360.0;
+
+    return offsetYaw;
+  }
+
+  /**
+   * Sets the yaw offset to zero the gyro at the current heading. This should be called when the
+   * robot is at the desired "zero" heading.
+   */
+  public void setYawOffset() {
+    yawOffsetDegrees = lastKnownYawDegrees;
+    System.out.println(
+        "Gyro offset set to: " + String.format("%.1f", yawOffsetDegrees) + " degrees");
   }
 }

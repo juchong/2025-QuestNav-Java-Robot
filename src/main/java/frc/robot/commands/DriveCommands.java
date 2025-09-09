@@ -17,9 +17,7 @@ import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.controller.ProfiledPIDController;
 import edu.wpi.first.math.filter.SlewRateLimiter;
-import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
-import edu.wpi.first.math.geometry.Transform2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.trajectory.TrapezoidProfile;
@@ -43,20 +41,25 @@ public class DriveCommands {
   // Constants are now defined in DriveConstants.java
   private static final double WHEEL_RADIUS_RAMP_RATE = 0.05; // Rad/Sec^2
 
+  // Static rate limiters that persist across all drive commands
+  private static final SlewRateLimiter staticLinearRateLimiter =
+      new SlewRateLimiter(DriveConstants.linearRateLimit);
+  private static final SlewRateLimiter staticAngularRateLimiter =
+      new SlewRateLimiter(DriveConstants.angularRateLimit);
+
   private DriveCommands() {}
 
   private static Translation2d getLinearVelocityFromJoysticks(double x, double y) {
-    // Apply deadband
-    double linearMagnitude = MathUtil.applyDeadband(Math.hypot(x, y), DriveConstants.deadband);
-    Rotation2d linearDirection = new Rotation2d(Math.atan2(y, x));
+    // Apply deadband to individual components
+    double xDeadbanded = MathUtil.applyDeadband(x, DriveConstants.deadband);
+    double yDeadbanded = MathUtil.applyDeadband(y, DriveConstants.deadband);
 
-    // Square magnitude for more precise control
-    linearMagnitude = linearMagnitude * linearMagnitude;
+    // Square individual components for more precise control
+    xDeadbanded = Math.copySign(xDeadbanded * xDeadbanded, xDeadbanded);
+    yDeadbanded = Math.copySign(yDeadbanded * yDeadbanded, yDeadbanded);
 
-    // Return new linear velocity
-    return new Pose2d(new Translation2d(), linearDirection)
-        .transformBy(new Transform2d(linearMagnitude, 0.0, new Rotation2d()))
-        .getTranslation();
+    // Return linear velocity with separate X and Y components
+    return new Translation2d(xDeadbanded, yDeadbanded);
   }
 
   /**
@@ -313,9 +316,6 @@ public class DriveCommands {
     headingController.enableContinuousInput(-Math.PI, Math.PI);
     headingController.setTolerance(DriveConstants.inlineHeadingTolerance); // 6 degree tolerance
 
-    SlewRateLimiter linearRateLimiter = new SlewRateLimiter(DriveConstants.linearRateLimit);
-    SlewRateLimiter angularRateLimiter = new SlewRateLimiter(DriveConstants.angularRateLimit);
-
     // Low-pass filter for QuestNav heading data
     final double[] filteredHeading = {0.0};
     final boolean[] headingFilterInitialized = {false};
@@ -326,6 +326,8 @@ public class DriveCommands {
     }; // Last 3 corrections for oscillation detection
     final int[] correctionIndex = {0};
     final boolean[] questNavDisabled = {false};
+
+    // Use static rate limiters that persist across all drive commands
 
     return Commands.run(
         () -> {
@@ -341,7 +343,7 @@ public class DriveCommands {
           if (Math.abs(omega) > 0.1) {
             // Manual rotation - square for better control
             omega = Math.copySign(omega * omega, omega);
-            omega = angularRateLimiter.calculate(omega);
+            omega = staticAngularRateLimiter.calculate(omega);
           } else {
             // No manual rotation - use QuestNav for heading hold (if available and valid)
             if (questNav.isActive() && questNav.isTracking() && !questNavDisabled[0]) {
@@ -410,7 +412,7 @@ public class DriveCommands {
                           // Apply velocity limiting to prevent rapid changes
                           omega =
                               MathUtil.clamp(
-                                  angularRateLimiter.calculate(headingCorrection),
+                                  staticAngularRateLimiter.calculate(headingCorrection),
                                   -DriveConstants.headingVelocityLimit,
                                   DriveConstants.headingVelocityLimit);
                         }
@@ -418,7 +420,7 @@ public class DriveCommands {
                         // Apply velocity limiting to prevent rapid changes
                         omega =
                             MathUtil.clamp(
-                                angularRateLimiter.calculate(headingCorrection),
+                                staticAngularRateLimiter.calculate(headingCorrection),
                                 -DriveConstants.headingVelocityLimit,
                                 DriveConstants.headingVelocityLimit);
                       }
@@ -443,9 +445,9 @@ public class DriveCommands {
             }
           }
 
-          // Apply rate limiting to linear movement
-          double xSpeed = linearRateLimiter.calculate(linearVelocity.getX());
-          double ySpeed = linearRateLimiter.calculate(linearVelocity.getY());
+          // Apply rate limiting to linear movement (disabled for now)
+          double xSpeed = linearVelocity.getX();
+          double ySpeed = linearVelocity.getY();
 
           // Convert to field relative speeds & send command
           ChassisSpeeds speeds =
@@ -453,6 +455,7 @@ public class DriveCommands {
                   xSpeed * drive.getMaxLinearSpeedMetersPerSec(),
                   ySpeed * drive.getMaxLinearSpeedMetersPerSec(),
                   omega * drive.getMaxAngularSpeedRadPerSec());
+
           boolean isFlipped =
               DriverStation.getAlliance().isPresent()
                   && DriverStation.getAlliance().get() == Alliance.Red;
@@ -485,8 +488,7 @@ public class DriveCommands {
             DriveConstants.inlineHeadingKd2);
     headingController.enableContinuousInput(-Math.PI, Math.PI);
 
-    SlewRateLimiter linearRateLimiter = new SlewRateLimiter(DriveConstants.linearRateLimit);
-    SlewRateLimiter angularRateLimiter = new SlewRateLimiter(DriveConstants.angularRateLimit);
+    // Use static rate limiters that persist across all drive commands
 
     return Commands.run(
         () -> {
@@ -511,11 +513,11 @@ public class DriveCommands {
             }
           }
           omega = MathUtil.clamp(omega, -1.0, 1.0); // Clamp to prevent saturation
-          omega = angularRateLimiter.calculate(omega);
+          omega = staticAngularRateLimiter.calculate(omega);
 
           // Apply rate limiting to linear movement
-          double xSpeed = linearRateLimiter.calculate(linearVelocity.getX());
-          double ySpeed = linearRateLimiter.calculate(linearVelocity.getY());
+          double xSpeed = staticLinearRateLimiter.calculate(linearVelocity.getX());
+          double ySpeed = staticLinearRateLimiter.calculate(linearVelocity.getY());
 
           // Convert to field relative speeds & send command
           ChassisSpeeds speeds =
@@ -558,8 +560,7 @@ public class DriveCommands {
                 DriveConstants.inlineMaxHeadingAcceleration));
     headingController.enableContinuousInput(-Math.PI, Math.PI);
 
-    SlewRateLimiter linearRateLimiter = new SlewRateLimiter(DriveConstants.linearRateLimit);
-    SlewRateLimiter angularRateLimiter = new SlewRateLimiter(DriveConstants.angularRateLimit);
+    // Use static rate limiters that persist across all drive commands
 
     return Commands.run(
         () -> {
@@ -579,27 +580,27 @@ public class DriveCommands {
                 double currentHeading = questNav.getCurrentYawRadians();
                 double targetHeading = currentHeading + (omega * 0.5); // Scale rotation input
                 omega = headingController.calculate(currentHeading, targetHeading);
-                omega = angularRateLimiter.calculate(omega);
+                omega = staticAngularRateLimiter.calculate(omega);
               } else {
                 // No manual rotation - hold current heading
                 double currentHeading = questNav.getCurrentYawRadians();
                 omega = headingController.calculate(currentHeading, currentHeading);
-                omega = angularRateLimiter.calculate(omega);
+                omega = staticAngularRateLimiter.calculate(omega);
               }
             } catch (Exception e) {
               // QuestNav not available, use manual control
               omega = Math.copySign(omega * omega, omega);
-              omega = angularRateLimiter.calculate(omega);
+              omega = staticAngularRateLimiter.calculate(omega);
             }
           } else {
             // QuestNav not active, use manual control
             omega = Math.copySign(omega * omega, omega);
-            omega = angularRateLimiter.calculate(omega);
+            omega = staticAngularRateLimiter.calculate(omega);
           }
 
           // Apply rate limiting to linear movement
-          double xSpeed = linearRateLimiter.calculate(linearVelocity.getX());
-          double ySpeed = linearRateLimiter.calculate(linearVelocity.getY());
+          double xSpeed = staticLinearRateLimiter.calculate(linearVelocity.getX());
+          double ySpeed = staticLinearRateLimiter.calculate(linearVelocity.getY());
 
           // Convert to field relative speeds & send command
           ChassisSpeeds speeds =

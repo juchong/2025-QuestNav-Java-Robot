@@ -328,4 +328,13 @@ public class Drive extends SubsystemBase {
   public GyroIOInputs getGyroInputs() {
     return gyroInputs;
   }
+
+  /** Sets the gyro offset to zero the gyro at the current heading. */
+  public void setGyroOffset() {
+    if (gyroIO instanceof GyroIOQuestNav) {
+      ((GyroIOQuestNav) gyroIO).setYawOffset();
+    } else {
+      System.out.println("Gyro offset not supported for this gyro type");
+    }
+  }
 }
