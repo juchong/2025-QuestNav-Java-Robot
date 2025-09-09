@@ -15,6 +15,7 @@ package frc.robot;
 
 import com.pathplanner.lib.auto.AutoBuilder;
 import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.wpilibj.GenericHID;
 import edu.wpi.first.wpilibj.XboxController;
 import edu.wpi.first.wpilibj2.command.Command;
@@ -189,17 +190,18 @@ public class RobotContainer {
             Commands.runOnce(
                 () -> {
                   if (questNav.isActive()) {
-                    // Reset QuestNav heading to current robot heading
+                    // Reset QuestNav heading to current position with zero rotation
                     Pose2d currentRobotPose = drive.getPose();
-                    questNav.setRobotPose(currentRobotPose);
+                    Pose2d resetPose =
+                        new Pose2d(
+                            currentRobotPose.getX(), currentRobotPose.getY(), new Rotation2d(0.0));
+                    questNav.setRobotPose(resetPose);
                     System.out.println(
-                        "QuestNav heading reset to robot pose: X="
-                            + String.format("%.1f", currentRobotPose.getX())
+                        "QuestNav heading reset to: X="
+                            + String.format("%.1f", resetPose.getX())
                             + ", Y="
-                            + String.format("%.1f", currentRobotPose.getY())
-                            + ", Rotation="
-                            + String.format("%.1f", currentRobotPose.getRotation().getDegrees())
-                            + "°");
+                            + String.format("%.1f", resetPose.getY())
+                            + ", Rotation=0.0°");
                   } else {
                     System.out.println("QuestNav not active - cannot reset heading");
                   }
