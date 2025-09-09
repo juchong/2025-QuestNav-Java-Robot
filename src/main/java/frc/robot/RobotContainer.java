@@ -154,14 +154,13 @@ public class RobotContainer {
     // Toggle between QuestNav-enhanced and open-loop drive when start button (button 9) is pressed
     controller.start().onTrue(toggleDriveMode);
 
-    // Switch to smooth drive mode when X button is pressed (single press toggle)
-    // Note: X and Y are swapped on this controller
+    // Toggle smooth drive mode when back button (select) is pressed
     controller
-        .x()
+        .back()
         .onTrue(
             Commands.runOnce(
                 () -> {
-                  System.out.println("X button pressed - toggling smooth drive mode");
+                  System.out.println("Back button pressed - toggling smooth drive mode");
                   smoothDriveActive = !smoothDriveActive;
                   if (smoothDriveActive) {
                     System.out.println("Smooth drive mode activated");
@@ -169,6 +168,25 @@ public class RobotContainer {
                     System.out.println("Smooth drive mode deactivated");
                   }
                   updateDriveCommand();
+                }));
+
+    // Print current pose when X button is pressed
+    // Note: X and Y are swapped on this controller
+    controller
+        .x()
+        .onTrue(
+            Commands.runOnce(
+                () -> {
+                  Pose2d currentPose = drive.getPose();
+                  System.out.println("X button pressed - Current robot pose:");
+                  System.out.println(
+                      "  X: " + String.format("%.2f", currentPose.getX()) + " meters");
+                  System.out.println(
+                      "  Y: " + String.format("%.2f", currentPose.getY()) + " meters");
+                  System.out.println(
+                      "  Rotation: "
+                          + String.format("%.1f", currentPose.getRotation().getDegrees())
+                          + "°");
                 }));
 
     // Print QuestNav diagnostics when Y button is pressed
