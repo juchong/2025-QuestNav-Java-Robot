@@ -40,21 +40,14 @@ import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
 
 public class DriveCommands {
-  private static final double DEADBAND = 0.1;
-  private static final double ANGLE_KP = 5.0;
-  private static final double ANGLE_KD = 0.4;
-  private static final double ANGLE_MAX_VELOCITY = 8.0;
-  private static final double ANGLE_MAX_ACCELERATION = 20.0;
-  private static final double FF_START_DELAY = 2.0; // Secs
-  private static final double FF_RAMP_RATE = 0.1; // Volts/Sec
-  private static final double WHEEL_RADIUS_MAX_VELOCITY = 0.25; // Rad/Sec
+  // Constants are now defined in DriveConstants.java
   private static final double WHEEL_RADIUS_RAMP_RATE = 0.05; // Rad/Sec^2
 
   private DriveCommands() {}
 
   private static Translation2d getLinearVelocityFromJoysticks(double x, double y) {
     // Apply deadband
-    double linearMagnitude = MathUtil.applyDeadband(Math.hypot(x, y), DEADBAND);
+    double linearMagnitude = MathUtil.applyDeadband(Math.hypot(x, y), DriveConstants.deadband);
     Rotation2d linearDirection = new Rotation2d(Math.atan2(y, x));
 
     // Square magnitude for more precise control
@@ -81,7 +74,8 @@ public class DriveCommands {
               getLinearVelocityFromJoysticks(xSupplier.getAsDouble(), ySupplier.getAsDouble());
 
           // Apply rotation deadband
-          double omega = MathUtil.applyDeadband(omegaSupplier.getAsDouble(), DEADBAND);
+          double omega =
+              MathUtil.applyDeadband(omegaSupplier.getAsDouble(), DriveConstants.deadband);
 
           // Square rotation value for more precise control
           omega = Math.copySign(omega * omega, omega);
@@ -119,10 +113,11 @@ public class DriveCommands {
     // Create PID controller
     ProfiledPIDController angleController =
         new ProfiledPIDController(
-            ANGLE_KP,
+            DriveConstants.angleKp,
             0.0,
-            ANGLE_KD,
-            new TrapezoidProfile.Constraints(ANGLE_MAX_VELOCITY, ANGLE_MAX_ACCELERATION));
+            DriveConstants.angleKd,
+            new TrapezoidProfile.Constraints(
+                DriveConstants.angleMaxVelocity, DriveConstants.angleMaxAcceleration));
     angleController.enableContinuousInput(-Math.PI, Math.PI);
 
     // Construct command
@@ -183,7 +178,7 @@ public class DriveCommands {
                   drive.runCharacterization(0.0);
                 },
                 drive)
-            .withTimeout(FF_START_DELAY),
+            .withTimeout(DriveConstants.ffStartDelay),
 
         // Start timer
         Commands.runOnce(timer::restart),
@@ -191,7 +186,7 @@ public class DriveCommands {
         // Accelerate and gather data
         Commands.run(
                 () -> {
-                  double voltage = timer.get() * FF_RAMP_RATE;
+                  double voltage = timer.get() * DriveConstants.ffRampRate;
                   drive.runCharacterization(voltage);
                   velocitySamples.add(drive.getFFCharacterizationVelocity());
                   voltageSamples.add(voltage);
@@ -239,7 +234,7 @@ public class DriveCommands {
             // Turn in place, accelerating up to full speed
             Commands.run(
                 () -> {
-                  double speed = limiter.calculate(WHEEL_RADIUS_MAX_VELOCITY);
+                  double speed = limiter.calculate(DriveConstants.wheelRadiusMaxVelocity);
                   drive.runVelocity(new ChassisSpeeds(0.0, 0.0, speed));
                 },
                 drive)),
@@ -305,12 +300,16 @@ public class DriveCommands {
       DoubleSupplier ySupplier,
       DoubleSupplier omegaSupplier) {
 
-    PIDController headingController = new PIDController(1.5, 0.0, 0.1);
+    PIDController headingController =
+        new PIDController(
+            DriveConstants.inlineHeadingKp1,
+            DriveConstants.inlineHeadingKi1,
+            DriveConstants.inlineHeadingKd1);
     headingController.enableContinuousInput(-Math.PI, Math.PI);
-    headingController.setTolerance(0.05); // 3 degree tolerance
+    headingController.setTolerance(DriveConstants.inlineHeadingTolerance); // 3 degree tolerance
 
-    SlewRateLimiter linearRateLimiter = new SlewRateLimiter(2.0);
-    SlewRateLimiter angularRateLimiter = new SlewRateLimiter(3.0);
+    SlewRateLimiter linearRateLimiter = new SlewRateLimiter(DriveConstants.linearRateLimit);
+    SlewRateLimiter angularRateLimiter = new SlewRateLimiter(DriveConstants.angularRateLimit);
 
     return Commands.run(
         () -> {
@@ -319,7 +318,8 @@ public class DriveCommands {
               getLinearVelocityFromJoysticks(xSupplier.getAsDouble(), ySupplier.getAsDouble());
 
           // Apply rotation deadband
-          double omega = MathUtil.applyDeadband(omegaSupplier.getAsDouble(), DEADBAND);
+          double omega =
+              MathUtil.applyDeadband(omegaSupplier.getAsDouble(), DriveConstants.deadband);
 
           // If manual rotation input is provided, use it directly
           if (Math.abs(omega) > 0.1) {
@@ -410,11 +410,15 @@ public class DriveCommands {
       DoubleSupplier ySupplier,
       DoubleSupplier omegaSupplier) {
 
-    PIDController headingController = new PIDController(2.0, 0.0, 0.15);
+    PIDController headingController =
+        new PIDController(
+            DriveConstants.inlineHeadingKp2,
+            DriveConstants.inlineHeadingKi2,
+            DriveConstants.inlineHeadingKd2);
     headingController.enableContinuousInput(-Math.PI, Math.PI);
 
-    SlewRateLimiter linearRateLimiter = new SlewRateLimiter(2.0);
-    SlewRateLimiter angularRateLimiter = new SlewRateLimiter(2.5);
+    SlewRateLimiter linearRateLimiter = new SlewRateLimiter(DriveConstants.linearRateLimit);
+    SlewRateLimiter angularRateLimiter = new SlewRateLimiter(DriveConstants.angularRateLimit);
 
     return Commands.run(
         () -> {
@@ -423,7 +427,8 @@ public class DriveCommands {
               getLinearVelocityFromJoysticks(xSupplier.getAsDouble(), ySupplier.getAsDouble());
 
           // Apply rotation deadband
-          double omega = MathUtil.applyDeadband(omegaSupplier.getAsDouble(), DEADBAND);
+          double omega =
+              MathUtil.applyDeadband(omegaSupplier.getAsDouble(), DriveConstants.deadband);
 
           // Always apply QuestNav heading correction, but allow manual override
           if (questNav.isActive()) {
@@ -476,11 +481,17 @@ public class DriveCommands {
       DoubleSupplier omegaSupplier) {
 
     ProfiledPIDController headingController =
-        new ProfiledPIDController(3.0, 0.0, 0.2, new TrapezoidProfile.Constraints(4.0, 8.0));
+        new ProfiledPIDController(
+            DriveConstants.inlineProfiledHeadingKp,
+            DriveConstants.inlineProfiledHeadingKi,
+            DriveConstants.inlineProfiledHeadingKd,
+            new TrapezoidProfile.Constraints(
+                DriveConstants.inlineMaxHeadingVelocity,
+                DriveConstants.inlineMaxHeadingAcceleration));
     headingController.enableContinuousInput(-Math.PI, Math.PI);
 
-    SlewRateLimiter linearRateLimiter = new SlewRateLimiter(2.0);
-    SlewRateLimiter angularRateLimiter = new SlewRateLimiter(3.0);
+    SlewRateLimiter linearRateLimiter = new SlewRateLimiter(DriveConstants.linearRateLimit);
+    SlewRateLimiter angularRateLimiter = new SlewRateLimiter(DriveConstants.angularRateLimit);
 
     return Commands.run(
         () -> {
@@ -489,7 +500,8 @@ public class DriveCommands {
               getLinearVelocityFromJoysticks(xSupplier.getAsDouble(), ySupplier.getAsDouble());
 
           // Apply rotation deadband
-          double omega = MathUtil.applyDeadband(omegaSupplier.getAsDouble(), DEADBAND);
+          double omega =
+              MathUtil.applyDeadband(omegaSupplier.getAsDouble(), DriveConstants.deadband);
 
           // If manual rotation input is provided, use profiled PID for smooth control
           if (questNav.isActive()) {

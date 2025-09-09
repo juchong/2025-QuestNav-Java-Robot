@@ -25,6 +25,7 @@ import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
 import frc.robot.subsystems.drive.Drive;
+import frc.robot.subsystems.drive.DriveConstants;
 import frc.robot.subsystems.questnav.QuestNavSubsystem;
 import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
@@ -35,26 +36,7 @@ import java.util.function.Supplier;
  */
 public class QuestNavClosedLoopControl {
 
-  // PID Constants for heading control
-  private static final double HEADING_KP = 2.0;
-  private static final double HEADING_KI = 0.0;
-  private static final double HEADING_KD = 0.1;
-
-  // PID Constants for balance control
-  private static final double BALANCE_KP = 0.5;
-  private static final double BALANCE_KI = 0.0;
-  private static final double BALANCE_KD = 0.05;
-
-  // Profiled PID Constants for smooth heading changes
-  private static final double PROFILED_HEADING_KP = 3.0;
-  private static final double PROFILED_HEADING_KI = 0.0;
-  private static final double PROFILED_HEADING_KD = 0.2;
-  private static final double MAX_HEADING_VELOCITY = 4.0; // rad/s
-  private static final double MAX_HEADING_ACCELERATION = 8.0; // rad/s²
-
-  // Rate limiters for smooth control
-  private static final double LINEAR_RATE_LIMIT = 2.0; // m/s²
-  private static final double ANGULAR_RATE_LIMIT = 3.0; // rad/s²
+  // PID Constants are now defined in DriveConstants.java
 
   private QuestNavClosedLoopControl() {}
 
@@ -65,11 +47,13 @@ public class QuestNavClosedLoopControl {
   public static Command holdHeading(
       Drive drive, QuestNavSubsystem questNav, DoubleSupplier xSupplier, DoubleSupplier ySupplier) {
 
-    PIDController headingController = new PIDController(HEADING_KP, HEADING_KI, HEADING_KD);
+    PIDController headingController =
+        new PIDController(
+            DriveConstants.headingKp, DriveConstants.headingKi, DriveConstants.headingKd);
     headingController.enableContinuousInput(-Math.PI, Math.PI);
 
-    SlewRateLimiter linearRateLimiter = new SlewRateLimiter(LINEAR_RATE_LIMIT);
-    SlewRateLimiter angularRateLimiter = new SlewRateLimiter(ANGULAR_RATE_LIMIT);
+    SlewRateLimiter linearRateLimiter = new SlewRateLimiter(DriveConstants.linearRateLimit);
+    SlewRateLimiter angularRateLimiter = new SlewRateLimiter(DriveConstants.angularRateLimit);
 
     return Commands.run(
         () -> {
@@ -81,8 +65,8 @@ public class QuestNavClosedLoopControl {
           headingCorrection = angularRateLimiter.calculate(headingCorrection);
 
           // Get linear velocity from joysticks
-          double x = MathUtil.applyDeadband(xSupplier.getAsDouble(), 0.1);
-          double y = MathUtil.applyDeadband(ySupplier.getAsDouble(), 0.1);
+          double x = MathUtil.applyDeadband(xSupplier.getAsDouble(), DriveConstants.deadband);
+          double y = MathUtil.applyDeadband(ySupplier.getAsDouble(), DriveConstants.deadband);
 
           // Apply rate limiting to linear movement
           x = linearRateLimiter.calculate(x);
@@ -123,13 +107,14 @@ public class QuestNavClosedLoopControl {
 
     ProfiledPIDController headingController =
         new ProfiledPIDController(
-            PROFILED_HEADING_KP,
-            PROFILED_HEADING_KI,
-            PROFILED_HEADING_KD,
-            new TrapezoidProfile.Constraints(MAX_HEADING_VELOCITY, MAX_HEADING_ACCELERATION));
+            DriveConstants.profiledHeadingKp,
+            DriveConstants.profiledHeadingKi,
+            DriveConstants.profiledHeadingKd,
+            new TrapezoidProfile.Constraints(
+                DriveConstants.maxHeadingVelocity, DriveConstants.maxHeadingAcceleration));
     headingController.enableContinuousInput(-Math.PI, Math.PI);
 
-    SlewRateLimiter linearRateLimiter = new SlewRateLimiter(LINEAR_RATE_LIMIT);
+    SlewRateLimiter linearRateLimiter = new SlewRateLimiter(DriveConstants.linearRateLimit);
 
     return Commands.run(
         () -> {
@@ -141,8 +126,8 @@ public class QuestNavClosedLoopControl {
           double headingCorrection = headingController.calculate(currentHeading, targetHeading);
 
           // Get linear velocity from joysticks
-          double x = MathUtil.applyDeadband(xSupplier.getAsDouble(), 0.1);
-          double y = MathUtil.applyDeadband(ySupplier.getAsDouble(), 0.1);
+          double x = MathUtil.applyDeadband(xSupplier.getAsDouble(), DriveConstants.deadband);
+          double y = MathUtil.applyDeadband(ySupplier.getAsDouble(), DriveConstants.deadband);
 
           // Apply rate limiting to linear movement
           x = linearRateLimiter.calculate(x);
@@ -177,10 +162,14 @@ public class QuestNavClosedLoopControl {
   public static Command maintainBalance(
       Drive drive, QuestNavSubsystem questNav, DoubleSupplier xSupplier, DoubleSupplier ySupplier) {
 
-    PIDController pitchController = new PIDController(BALANCE_KP, BALANCE_KI, BALANCE_KD);
-    PIDController rollController = new PIDController(BALANCE_KP, BALANCE_KI, BALANCE_KD);
+    PIDController pitchController =
+        new PIDController(
+            DriveConstants.balanceKp, DriveConstants.balanceKi, DriveConstants.balanceKd);
+    PIDController rollController =
+        new PIDController(
+            DriveConstants.balanceKp, DriveConstants.balanceKi, DriveConstants.balanceKd);
 
-    SlewRateLimiter linearRateLimiter = new SlewRateLimiter(LINEAR_RATE_LIMIT);
+    SlewRateLimiter linearRateLimiter = new SlewRateLimiter(DriveConstants.linearRateLimit);
 
     return Commands.run(
         () -> {
@@ -194,8 +183,8 @@ public class QuestNavClosedLoopControl {
           double rollCorrection = rollController.calculate(roll, 0.0);
 
           // Get linear velocity from joysticks
-          double x = MathUtil.applyDeadband(xSupplier.getAsDouble(), 0.1);
-          double y = MathUtil.applyDeadband(ySupplier.getAsDouble(), 0.1);
+          double x = MathUtil.applyDeadband(xSupplier.getAsDouble(), DriveConstants.deadband);
+          double y = MathUtil.applyDeadband(ySupplier.getAsDouble(), DriveConstants.deadband);
 
           // Apply rate limiting to linear movement
           x = linearRateLimiter.calculate(x);
@@ -237,10 +226,12 @@ public class QuestNavClosedLoopControl {
       DoubleSupplier speedSupplier,
       Supplier<Rotation2d> targetHeadingSupplier) {
 
-    PIDController headingController = new PIDController(HEADING_KP, HEADING_KI, HEADING_KD);
+    PIDController headingController =
+        new PIDController(
+            DriveConstants.headingKp, DriveConstants.headingKi, DriveConstants.headingKd);
     headingController.enableContinuousInput(-Math.PI, Math.PI);
 
-    SlewRateLimiter speedRateLimiter = new SlewRateLimiter(LINEAR_RATE_LIMIT);
+    SlewRateLimiter speedRateLimiter = new SlewRateLimiter(DriveConstants.linearRateLimit);
 
     return Commands.run(
         () -> {
@@ -252,7 +243,8 @@ public class QuestNavClosedLoopControl {
           double headingCorrection = headingController.calculate(currentHeading, targetHeading);
 
           // Get speed from supplier
-          double speed = MathUtil.applyDeadband(speedSupplier.getAsDouble(), 0.1);
+          double speed =
+              MathUtil.applyDeadband(speedSupplier.getAsDouble(), DriveConstants.deadband);
           speed = speedRateLimiter.calculate(speed);
 
           // Convert to field relative speeds
@@ -286,10 +278,11 @@ public class QuestNavClosedLoopControl {
 
     ProfiledPIDController headingController =
         new ProfiledPIDController(
-            PROFILED_HEADING_KP,
-            PROFILED_HEADING_KI,
-            PROFILED_HEADING_KD,
-            new TrapezoidProfile.Constraints(MAX_HEADING_VELOCITY, MAX_HEADING_ACCELERATION));
+            DriveConstants.profiledHeadingKp,
+            DriveConstants.profiledHeadingKi,
+            DriveConstants.profiledHeadingKd,
+            new TrapezoidProfile.Constraints(
+                DriveConstants.maxHeadingVelocity, DriveConstants.maxHeadingAcceleration));
     headingController.enableContinuousInput(-Math.PI, Math.PI);
 
     return Commands.run(

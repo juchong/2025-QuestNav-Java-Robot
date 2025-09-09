@@ -21,7 +21,7 @@ import edu.wpi.first.math.system.plant.DCMotor;
 import edu.wpi.first.math.util.Units;
 
 public class DriveConstants {
-  public static final double maxSpeedMetersPerSec = 1.4;
+  public static final double maxSpeedMetersPerSec = 4.8;
   public static final double odometryFrequency = 100.0; // Hz
   public static final double trackWidth = 0.395;
   public static final double wheelBase = 0.370;
@@ -71,7 +71,7 @@ public class DriveConstants {
   public static final double driveEncoderVelocityFactor =
       (2 * Math.PI) / 60.0 / driveMotorReduction; // Rotor RPM -> Wheel Rad/Sec
 
-  // Drive PID configuration
+  // Drive PID configuration - Written to the motor controllers - Do not change these values!
   public static final double driveKp = 0.0;
   public static final double driveKd = 0.0;
   public static final double driveKs = 0.0;
@@ -92,7 +92,7 @@ public class DriveConstants {
   public static final double turnEncoderPositionFactor = 2 * Math.PI; // Rotations -> Radians
   public static final double turnEncoderVelocityFactor = (2 * Math.PI) / 60.0; // RPM -> Rad/Sec
 
-  // Turn PID configuration
+  // Turn PID configuration - Written to the motor controllers - Do not change these values!
   public static final double turnKp = 2.0;
   public static final double turnKd = 0.0;
   public static final double turnSimP = 8.0;
@@ -116,4 +116,59 @@ public class DriveConstants {
               driveMotorCurrentLimit,
               1),
           moduleTranslations);
+
+  // PathPlanner PID configuration
+  public static final double pathPlannerTranslationKp = 5.0;
+  public static final double pathPlannerTranslationKi = 0.0;
+  public static final double pathPlannerTranslationKd = 0.0;
+  public static final double pathPlannerRotationKp = 5.0;
+  public static final double pathPlannerRotationKi = 0.0;
+  public static final double pathPlannerRotationKd = 0.0;
+
+  // QuestNav Closed-Loop Control PID configuration
+  public static final double headingKp = 2.0;
+  public static final double headingKi = 0.0;
+  public static final double headingKd = 0.1;
+
+  public static final double balanceKp = 0.5;
+  public static final double balanceKi = 0.0;
+  public static final double balanceKd = 0.05;
+
+  public static final double profiledHeadingKp = 3.0;
+  public static final double profiledHeadingKi = 0.0;
+  public static final double profiledHeadingKd = 0.2;
+  public static final double maxHeadingVelocity = 4.0; // rad/s
+  public static final double maxHeadingAcceleration = 8.0; // rad/s²
+
+  // Rate limiters for smooth control
+  public static final double linearRateLimit = 2.0; // m/s²
+  public static final double angularRateLimit = 3.0; // rad/s²
+
+  // Drive Commands PID configuration
+  public static final double angleKp = 5.0;
+  public static final double angleKd = 0.4;
+  public static final double angleMaxVelocity = 8.0;
+  public static final double angleMaxAcceleration = 20.0;
+
+  // Drive Commands control constants
+  public static final double deadband = 0.1;
+  public static final double ffStartDelay = 2.0; // Secs
+  public static final double ffRampRate = 0.1; // Volts/Sec
+  public static final double wheelRadiusMaxVelocity = 0.25; // Rad/Sec
+
+  // Inline PID constants for specific commands
+  public static final double inlineHeadingKp1 = 1.5;
+  public static final double inlineHeadingKi1 = 0.0;
+  public static final double inlineHeadingKd1 = 0.1;
+  public static final double inlineHeadingTolerance = 0.05; // 3 degree tolerance
+
+  public static final double inlineHeadingKp2 = 2.0;
+  public static final double inlineHeadingKi2 = 0.0;
+  public static final double inlineHeadingKd2 = 0.15;
+
+  public static final double inlineProfiledHeadingKp = 3.0;
+  public static final double inlineProfiledHeadingKi = 0.0;
+  public static final double inlineProfiledHeadingKd = 0.2;
+  public static final double inlineMaxHeadingVelocity = 4.0;
+  public static final double inlineMaxHeadingAcceleration = 8.0;
 }
