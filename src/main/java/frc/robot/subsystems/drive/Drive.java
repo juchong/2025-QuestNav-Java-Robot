@@ -149,6 +149,10 @@ public class Drive extends SubsystemBase {
       Logger.recordOutput("SwerveStates/SetpointsOptimized", new SwerveModuleState[] {});
     }
 
+    // Log current robot pose for AdvantageScope visualization
+    Pose2d currentPose = getPose();
+    Logger.recordOutput("Drive/RobotPose", currentPose);
+
     // Update odometry
     double[] sampleTimestamps =
         modules[0].getOdometryTimestamps(); // All signals are sampled together

@@ -160,7 +160,7 @@ public class DriveConstants {
   public static final double inlineHeadingKp1 = 1.0 / 60.0;
   public static final double inlineHeadingKi1 = 0.0;
   public static final double inlineHeadingKd1 = 0.001;
-  public static final double inlineHeadingTolerance = 0.05; // radians
+  public static final double inlineHeadingTolerance = 0.02; // radians
 
   // QuestNav Joystick Drive filtering constants
   public static final boolean enableQuestNavHeadingFilter =

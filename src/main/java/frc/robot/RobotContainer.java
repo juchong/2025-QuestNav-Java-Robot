@@ -219,9 +219,6 @@ public class RobotContainer {
                     },
                     drive)
                 .ignoringDisable(true));
-
-    // Note: Long press functionality temporarily disabled due to button mapping conflicts
-    // TODO: Re-implement long press with proper button mapping
   }
 
   /**

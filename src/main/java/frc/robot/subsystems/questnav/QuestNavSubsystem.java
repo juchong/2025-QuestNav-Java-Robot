@@ -49,12 +49,22 @@ public class QuestNavSubsystem extends SubsystemBase {
     Logger.recordOutput("QuestNav/Tracking", questNav.isTracking());
     Logger.recordOutput("QuestNav/Latency", questNav.getLatency());
 
-    // Log current pose data for debugging
+    // Log QuestNav pose data for AdvantageScope visualization
     try {
       Pose2d currentPose = getRobotPose();
-      Logger.recordOutput("QuestNav/CurrentYawDegrees", currentPose.getRotation().getDegrees());
-      Logger.recordOutput("QuestNav/CurrentX", currentPose.getX());
-      Logger.recordOutput("QuestNav/CurrentY", currentPose.getY());
+
+      // Log complete pose for 2D field visualization
+      Logger.recordOutput("QuestNav/Pose", currentPose);
+
+      // Log raw QuestNav pose (before robot transform) for comparison
+      PoseFrame[] poseFrames = questNav.getAllUnreadPoseFrames();
+      if (poseFrames.length > 0) {
+        Pose2d rawQuestPose = poseFrames[poseFrames.length - 1].questPose();
+        if (rawQuestPose != null) {
+          Logger.recordOutput("QuestNav/RawPose", rawQuestPose);
+        }
+      }
+
     } catch (Exception e) {
       Logger.recordOutput("QuestNav/Error", e.getMessage());
     }
@@ -68,6 +78,25 @@ public class QuestNavSubsystem extends SubsystemBase {
     questNav
         .getFrameCount()
         .ifPresent(frameCount -> Logger.recordOutput("QuestNav/FrameCount", frameCount));
+
+    // Log additional data for plotting and analysis
+    try {
+      PoseFrame[] poseFrames = questNav.getAllUnreadPoseFrames();
+      Logger.recordOutput("QuestNav/PoseFrameCount", poseFrames.length);
+
+      // Log app timestamp if available
+      questNav
+          .getAppTimestamp()
+          .ifPresent(timestamp -> Logger.recordOutput("QuestNav/AppTimestamp", timestamp));
+
+      // Log tracking lost counter if available
+      questNav
+          .getTrackingLostCounter()
+          .ifPresent(counter -> Logger.recordOutput("QuestNav/TrackingLostCounter", counter));
+
+    } catch (Exception e) {
+      // Ignore errors for additional logging
+    }
   }
 
   /**
