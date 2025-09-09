@@ -140,9 +140,9 @@ public class DriveConstants {
   public static final double maxHeadingVelocity = 4.0; // rad/s
   public static final double maxHeadingAcceleration = 8.0; // rad/s²
 
-  // Rate limiters for smooth control
+  // Rate limiters for smooth control - VERY CONSERVATIVE SETTINGS
   public static final double linearRateLimit = 2.0; // m/s²
-  public static final double angularRateLimit = 3.0; // rad/s²
+  public static final double angularRateLimit = 1.0; // rad/s²
 
   // Drive Commands PID configuration
   public static final double angleKp = 5.0;
@@ -157,10 +157,23 @@ public class DriveConstants {
   public static final double wheelRadiusMaxVelocity = 0.25; // Rad/Sec
 
   // Inline PID constants for specific commands
-  public static final double inlineHeadingKp1 = 1.5;
+  public static final double inlineHeadingKp1 = 1.0 / 60.0;
   public static final double inlineHeadingKi1 = 0.0;
-  public static final double inlineHeadingKd1 = 0.1;
-  public static final double inlineHeadingTolerance = 0.05; // 3 degree tolerance
+  public static final double inlineHeadingKd1 = 0.001;
+  public static final double inlineHeadingTolerance = 0.05; // radians
+
+  // QuestNav filtering constants
+  public static final boolean enableQuestNavHeadingFilter =
+      true; // Set to false to disable filtering
+  public static final double questNavHeadingFilterAlpha =
+      0.1; // Much more aggressive filtering (0.0-1.0, lower = more filtering)
+
+  // Additional anti-oscillation constants
+  public static final double maxHeadingCorrection =
+      0.1; // Maximum correction in rad/s (reduced from 0.3)
+  public static final double headingVelocityLimit = 0.5; // Maximum angular velocity in rad/s
+  public static final double headingHysteresis =
+      0.05; // Hysteresis band in radians to prevent oscillation
 
   public static final double inlineHeadingKp2 = 2.0;
   public static final double inlineHeadingKi2 = 0.0;

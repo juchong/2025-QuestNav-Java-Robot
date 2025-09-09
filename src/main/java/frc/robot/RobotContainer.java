@@ -32,6 +32,7 @@ import frc.robot.subsystems.drive.ModuleIO;
 import frc.robot.subsystems.drive.ModuleIOSim;
 import frc.robot.subsystems.drive.ModuleIOSpark;
 import frc.robot.subsystems.questnav.QuestNavSubsystem;
+import org.littletonrobotics.junction.Logger;
 import org.littletonrobotics.junction.networktables.LoggedDashboardChooser;
 
 /**
@@ -50,6 +51,9 @@ public class RobotContainer {
 
   // Dashboard inputs
   private final LoggedDashboardChooser<Command> autoChooser;
+
+  // Drive mode state
+  private boolean questNavMode = true;
 
   /** The container for the robot. Contains subsystems, OI devices, and commands. */
   public RobotContainer() {
@@ -112,6 +116,9 @@ public class RobotContainer {
 
     // Configure the button bindings
     configureButtonBindings();
+
+    // Initialize logging
+    Logger.recordOutput("RobotContainer/QuestNavMode", questNavMode);
   }
 
   /**
@@ -121,24 +128,43 @@ public class RobotContainer {
    * edu.wpi.first.wpilibj2.command.button.JoystickButton}.
    */
   private void configureButtonBindings() {
-    // Default command, normal field-relative drive (fallback mode)
+    // Set up drive mode toggle command
+    Command toggleDriveMode =
+        Commands.runOnce(
+            () -> {
+              questNavMode = !questNavMode;
+              Logger.recordOutput("RobotContainer/QuestNavMode", questNavMode);
+              if (questNavMode) {
+                drive.setDefaultCommand(
+                    DriveCommands.questNavJoystickDrive(
+                        drive,
+                        questNav,
+                        () -> -controller.getLeftY(),
+                        () -> -controller.getLeftX(),
+                        () -> -controller.getRightX()));
+                System.out.println("Switched to QuestNav-enhanced drive mode");
+              } else {
+                drive.setDefaultCommand(
+                    DriveCommands.joystickDrive(
+                        drive,
+                        () -> -controller.getLeftY(),
+                        () -> -controller.getLeftX(),
+                        () -> -controller.getRightX()));
+                System.out.println("Switched to open-loop drive mode");
+              }
+            });
+
+    // Default command, QuestNav-enhanced drive mode
     drive.setDefaultCommand(
-        DriveCommands.joystickDrive(
+        DriveCommands.questNavJoystickDrive(
             drive,
+            questNav,
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
 
-    // Switch to QuestNav-enhanced drive when A button is held
-    controller
-        .a()
-        .whileTrue(
-            DriveCommands.questNavJoystickDrive(
-                drive,
-                questNav,
-                () -> -controller.getLeftY(),
-                () -> -controller.getLeftX(),
-                () -> -controller.getRightX()));
+    // Toggle between QuestNav-enhanced and open-loop drive when start button (button 9) is pressed
+    controller.start().onTrue(toggleDriveMode);
 
     // Switch to smooth drive mode when Y button is held
     controller
@@ -166,10 +192,10 @@ public class RobotContainer {
                 drive, questNav, () -> new Rotation2d(Math.PI)));
 
     // Print QuestNav diagnostics when X button is pressed
-    controller.x().onTrue(QuestNavDiagnostics.printDiagnostics(questNav));
+    controller.x().onTrue(QuestNavDiagnostics.printDiagnostics(questNav, drive));
 
-    // Switch to X pattern when start button is pressed
-    controller.start().onTrue(Commands.runOnce(drive::stopWithX, drive));
+    // Switch to X pattern when A button is pressed
+    controller.a().onTrue(Commands.runOnce(drive::stopWithX, drive));
 
     // Reset gyro to 0° when B button is pressed
     controller
@@ -190,5 +216,14 @@ public class RobotContainer {
    */
   public Command getAutonomousCommand() {
     return autoChooser.get();
+  }
+
+  /**
+   * Get the current drive mode state.
+   *
+   * @return true if QuestNav mode is active (default), false if open-loop mode
+   */
+  public boolean isQuestNavMode() {
+    return questNavMode;
   }
 }

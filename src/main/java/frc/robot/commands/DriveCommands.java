@@ -75,7 +75,7 @@ public class DriveCommands {
 
           // Apply rotation deadband
           double omega =
-              MathUtil.applyDeadband(omegaSupplier.getAsDouble(), DriveConstants.deadband);
+              MathUtil.applyDeadband(-omegaSupplier.getAsDouble(), DriveConstants.deadband);
 
           // Square rotation value for more precise control
           omega = Math.copySign(omega * omega, omega);
@@ -292,6 +292,11 @@ public class DriveCommands {
   /**
    * Enhanced joystick drive with QuestNav closed-loop heading control. Automatically corrects for
    * heading drift while allowing manual rotation input.
+   *
+   * <p>Features aggressive anti-oscillation measures: - Very low PID gains for stability - Optional
+   * low-pass filtering of QuestNav heading data (configurable in DriveConstants) - Large deadbands
+   * to prevent micro-corrections - Velocity limiting to prevent rapid changes - Oscillation
+   * detection with automatic safety disable
    */
   public static Command questNavJoystickDrive(
       Drive drive,
@@ -306,10 +311,21 @@ public class DriveCommands {
             DriveConstants.inlineHeadingKi1,
             DriveConstants.inlineHeadingKd1);
     headingController.enableContinuousInput(-Math.PI, Math.PI);
-    headingController.setTolerance(DriveConstants.inlineHeadingTolerance); // 3 degree tolerance
+    headingController.setTolerance(DriveConstants.inlineHeadingTolerance); // 6 degree tolerance
 
     SlewRateLimiter linearRateLimiter = new SlewRateLimiter(DriveConstants.linearRateLimit);
     SlewRateLimiter angularRateLimiter = new SlewRateLimiter(DriveConstants.angularRateLimit);
+
+    // Low-pass filter for QuestNav heading data
+    final double[] filteredHeading = {0.0};
+    final boolean[] headingFilterInitialized = {false};
+
+    // Oscillation detection and safety
+    final double[] lastHeadingCorrections = {
+      0.0, 0.0, 0.0
+    }; // Last 3 corrections for oscillation detection
+    final int[] correctionIndex = {0};
+    final boolean[] questNavDisabled = {false};
 
     return Commands.run(
         () -> {
@@ -319,7 +335,7 @@ public class DriveCommands {
 
           // Apply rotation deadband
           double omega =
-              MathUtil.applyDeadband(omegaSupplier.getAsDouble(), DriveConstants.deadband);
+              MathUtil.applyDeadband(-omegaSupplier.getAsDouble(), DriveConstants.deadband);
 
           // If manual rotation input is provided, use it directly
           if (Math.abs(omega) > 0.1) {
@@ -328,37 +344,89 @@ public class DriveCommands {
             omega = angularRateLimiter.calculate(omega);
           } else {
             // No manual rotation - use QuestNav for heading hold (if available and valid)
-            if (questNav.isActive() && questNav.isTracking()) {
+            if (questNav.isActive() && questNav.isTracking() && !questNavDisabled[0]) {
               try {
-                double currentHeading = questNav.getCurrentYawRadians();
-                // Debug: Print heading values occasionally
-                if (System.currentTimeMillis() % 1000 < 50) { // Print every ~1 second
-                  System.out.println(
-                      "QuestNav Heading: "
-                          + currentHeading
-                          + " rad ("
-                          + Math.toDegrees(currentHeading)
-                          + "°)");
+                double rawHeading = questNav.getCurrentYawRadians();
+
+                // Apply low-pass filter to reduce noise (if enabled)
+                double currentHeading;
+                if (DriveConstants.enableQuestNavHeadingFilter) {
+                  if (!headingFilterInitialized[0]) {
+                    filteredHeading[0] = rawHeading;
+                    headingFilterInitialized[0] = true;
+                  } else {
+                    // Exponential moving average filter
+                    filteredHeading[0] =
+                        DriveConstants.questNavHeadingFilterAlpha * rawHeading
+                            + (1.0 - DriveConstants.questNavHeadingFilterAlpha)
+                                * filteredHeading[0];
+                  }
+                  currentHeading = filteredHeading[0];
+                } else {
+                  // Filter disabled - use raw heading data
+                  currentHeading = rawHeading;
                 }
-                // Only apply correction if we have valid data (not exactly 0.0)
+
+                // Only apply correction if we have valid data and are not already at setpoint
                 if (Math.abs(currentHeading) > 0.001
                     || questNav.getRobotPose().getTranslation().getNorm() > 0.001) {
-                  double headingCorrection = headingController.calculate(currentHeading, 0.0);
-                  // Debug: Print correction values occasionally
-                  if (System.currentTimeMillis() % 1000 < 50) {
-                    System.out.println(
-                        "Heading Correction: "
-                            + headingCorrection
-                            + " (At Setpoint: "
-                            + headingController.atSetpoint()
-                            + ")");
-                  }
-                  // Only apply correction if not at setpoint
-                  if (!headingController.atSetpoint()) {
-                    // Limit correction to prevent excessive spinning
-                    headingCorrection = MathUtil.clamp(headingCorrection, -0.5, 0.5);
-                    omega = angularRateLimiter.calculate(headingCorrection);
+
+                  // Much larger deadband to prevent small corrections that cause oscillations
+                  if (Math.abs(currentHeading) > DriveConstants.inlineHeadingTolerance) {
+                    double headingCorrection = headingController.calculate(currentHeading, 0.0);
+
+                    // Apply much larger deadband to correction to prevent micro-corrections
+                    if (Math.abs(headingCorrection)
+                        > 0.05) { // ~3 degree deadband (increased from 1 degree)
+                      // Much more aggressive correction limiting
+                      headingCorrection =
+                          MathUtil.clamp(
+                              headingCorrection,
+                              -DriveConstants.maxHeadingCorrection,
+                              DriveConstants.maxHeadingCorrection);
+
+                      // Store correction for oscillation detection
+                      lastHeadingCorrections[correctionIndex[0]] = headingCorrection;
+                      correctionIndex[0] = (correctionIndex[0] + 1) % 3;
+
+                      // Check for oscillation pattern (alternating signs with large magnitude)
+                      if (correctionIndex[0] == 0) { // We have 3 samples
+                        double avgMagnitude =
+                            (Math.abs(lastHeadingCorrections[0])
+                                    + Math.abs(lastHeadingCorrections[1])
+                                    + Math.abs(lastHeadingCorrections[2]))
+                                / 3.0;
+                        boolean alternating =
+                            (lastHeadingCorrections[0] * lastHeadingCorrections[1] < 0)
+                                && (lastHeadingCorrections[1] * lastHeadingCorrections[2] < 0);
+
+                        if (alternating && avgMagnitude > 0.05) {
+                          // Oscillation detected - disable QuestNav heading control
+                          questNavDisabled[0] = true;
+                          System.out.println(
+                              "WARNING: QuestNav heading oscillation detected! Disabling heading control.");
+                          omega = 0.0;
+                        } else {
+                          // Apply velocity limiting to prevent rapid changes
+                          omega =
+                              MathUtil.clamp(
+                                  angularRateLimiter.calculate(headingCorrection),
+                                  -DriveConstants.headingVelocityLimit,
+                                  DriveConstants.headingVelocityLimit);
+                        }
+                      } else {
+                        // Apply velocity limiting to prevent rapid changes
+                        omega =
+                            MathUtil.clamp(
+                                angularRateLimiter.calculate(headingCorrection),
+                                -DriveConstants.headingVelocityLimit,
+                                DriveConstants.headingVelocityLimit);
+                      }
+                    } else {
+                      omega = 0.0;
+                    }
                   } else {
+                    // Close enough to setpoint, no correction needed
                     omega = 0.0;
                   }
                 } else {
@@ -428,7 +496,7 @@ public class DriveCommands {
 
           // Apply rotation deadband
           double omega =
-              MathUtil.applyDeadband(omegaSupplier.getAsDouble(), DriveConstants.deadband);
+              MathUtil.applyDeadband(-omegaSupplier.getAsDouble(), DriveConstants.deadband);
 
           // Always apply QuestNav heading correction, but allow manual override
           if (questNav.isActive()) {
@@ -501,7 +569,7 @@ public class DriveCommands {
 
           // Apply rotation deadband
           double omega =
-              MathUtil.applyDeadband(omegaSupplier.getAsDouble(), DriveConstants.deadband);
+              MathUtil.applyDeadband(-omegaSupplier.getAsDouble(), DriveConstants.deadband);
 
           // If manual rotation input is provided, use profiled PID for smooth control
           if (questNav.isActive()) {
