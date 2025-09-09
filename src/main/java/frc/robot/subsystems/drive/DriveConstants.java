@@ -121,32 +121,32 @@ public class DriveConstants {
   public static final double pathPlannerTranslationKp = 5.0;
   public static final double pathPlannerTranslationKi = 0.0;
   public static final double pathPlannerTranslationKd = 0.0;
-  public static final double pathPlannerRotationKp = 5.0;
+  public static final double pathPlannerRotationKp = 1.0 / 60.0;
   public static final double pathPlannerRotationKi = 0.0;
-  public static final double pathPlannerRotationKd = 0.0;
+  public static final double pathPlannerRotationKd = 0.001;
 
   // QuestNav Closed-Loop Control PID configuration
-  public static final double headingKp = 2.0;
+  public static final double headingKp = 1.0 / 60.0;
   public static final double headingKi = 0.0;
-  public static final double headingKd = 0.1;
+  public static final double headingKd = 0.001;
 
   public static final double balanceKp = 0.5;
   public static final double balanceKi = 0.0;
   public static final double balanceKd = 0.05;
 
-  public static final double profiledHeadingKp = 3.0;
+  public static final double profiledHeadingKp = 1.0 / 60.0;
   public static final double profiledHeadingKi = 0.0;
-  public static final double profiledHeadingKd = 0.2;
+  public static final double profiledHeadingKd = 0.001;
   public static final double maxHeadingVelocity = 4.0; // rad/s
   public static final double maxHeadingAcceleration = 8.0; // rad/s²
 
-  // Rate limiters for smooth control - VERY CONSERVATIVE SETTINGS
+  // Rate limiters for smooth control
   public static final double linearRateLimit = 2.0; // m/s²
   public static final double angularRateLimit = 1.0; // rad/s²
 
   // Drive Commands PID configuration
-  public static final double angleKp = 5.0;
-  public static final double angleKd = 0.4;
+  public static final double angleKp = 1.0 / 60.0;
+  public static final double angleKd = 0.001;
   public static final double angleMaxVelocity = 8.0;
   public static final double angleMaxAcceleration = 20.0;
 
@@ -156,32 +156,34 @@ public class DriveConstants {
   public static final double ffRampRate = 0.1; // Volts/Sec
   public static final double wheelRadiusMaxVelocity = 0.25; // Rad/Sec
 
-  // Inline PID constants for specific commands
+  // QuestNav Joystick Drive PID constants
   public static final double inlineHeadingKp1 = 1.0 / 60.0;
   public static final double inlineHeadingKi1 = 0.0;
   public static final double inlineHeadingKd1 = 0.001;
   public static final double inlineHeadingTolerance = 0.05; // radians
 
-  // QuestNav filtering constants
+  // QuestNav Joystick Drive filtering constants
   public static final boolean enableQuestNavHeadingFilter =
       true; // Set to false to disable filtering
   public static final double questNavHeadingFilterAlpha =
       0.1; // Much more aggressive filtering (0.0-1.0, lower = more filtering)
 
-  // Additional anti-oscillation constants
+  // QuestNav Joystick Drive anti-oscillation constants
   public static final double maxHeadingCorrection =
       0.1; // Maximum correction in rad/s (reduced from 0.3)
   public static final double headingVelocityLimit = 0.5; // Maximum angular velocity in rad/s
   public static final double headingHysteresis =
       0.05; // Hysteresis band in radians to prevent oscillation
 
-  public static final double inlineHeadingKp2 = 2.0;
+  // QuestNav Straight Drive PID constants
+  public static final double inlineHeadingKp2 = 1.0 / 60.0;
   public static final double inlineHeadingKi2 = 0.0;
-  public static final double inlineHeadingKd2 = 0.15;
+  public static final double inlineHeadingKd2 = 0.001;
 
-  public static final double inlineProfiledHeadingKp = 3.0;
+  // QuestNav Straight Drive profiling constants
+  public static final double inlineProfiledHeadingKp = 1.0 / 60.0;
   public static final double inlineProfiledHeadingKi = 0.0;
-  public static final double inlineProfiledHeadingKd = 0.2;
+  public static final double inlineProfiledHeadingKd = 0.001;
   public static final double inlineMaxHeadingVelocity = 4.0;
   public static final double inlineMaxHeadingAcceleration = 8.0;
 }
