@@ -379,7 +379,9 @@ public class DriveCommands {
 
                     // Apply much larger deadband to correction to prevent micro-corrections
                     if (Math.abs(headingCorrection)
-                        > 0.05) { // ~3 degree deadband (increased from 1 degree)
+                        > DriveConstants
+                            .headingCorrectionDeadband) { // ~3 degree deadband (increased from 1
+                      // degree)
                       // Much more aggressive correction limiting
                       headingCorrection =
                           MathUtil.clamp(
@@ -402,7 +404,8 @@ public class DriveCommands {
                             (lastHeadingCorrections[0] * lastHeadingCorrections[1] < 0)
                                 && (lastHeadingCorrections[1] * lastHeadingCorrections[2] < 0);
 
-                        if (alternating && avgMagnitude > 0.05) {
+                        if (alternating
+                            && avgMagnitude > DriveConstants.headingOscillationThreshold) {
                           // Oscillation detected - disable QuestNav heading control
                           questNavDisabled[0] = true;
                           System.out.println(

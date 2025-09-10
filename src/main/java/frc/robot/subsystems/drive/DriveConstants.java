@@ -160,7 +160,7 @@ public class DriveConstants {
   public static final double inlineHeadingKp1 = 1.0 / 60.0;
   public static final double inlineHeadingKi1 = 0.0;
   public static final double inlineHeadingKd1 = 0.001;
-  public static final double inlineHeadingTolerance = 0.02; // radians
+  public static final double inlineHeadingTolerance = 0.01; // radians
 
   // QuestNav Joystick Drive filtering constants
   public static final boolean enableQuestNavHeadingFilter =
@@ -174,6 +174,10 @@ public class DriveConstants {
   public static final double headingVelocityLimit = 0.5; // Maximum angular velocity in rad/s
   public static final double headingHysteresis =
       0.05; // Hysteresis band in radians to prevent oscillation
+  public static final double headingCorrectionDeadband =
+      0.01; // Deadband for heading correction (~3 degrees)
+  public static final double headingOscillationThreshold =
+      0.01; // Threshold for oscillation detection
 
   // QuestNav Straight Drive PID constants
   public static final double inlineHeadingKp2 = 1.0 / 60.0;
